@@ -69,7 +69,7 @@ class Flog < SexpProcessor
   @@no_method = :none
 
   attr_accessor :multiplier
-  attr_reader :calls, :options, :class_stack, :method_stack, :mass
+  attr_reader :calls, :options, :class_stack, :method_stack, :mass, :method_locations
 
   def self.default_options
     {
@@ -199,8 +199,9 @@ class Flog < SexpProcessor
   ##
   # Adds name to the list of methods, for the duration of the block
 
-  def in_method name
+  def in_method(name, line)
     @method_stack.unshift name
+    @method_locations["#{klass_name}##{name}"] = line
     yield
     @method_stack.shift
   end
@@ -215,6 +216,7 @@ class Flog < SexpProcessor
     @options             = options
     @class_stack         = []
     @method_stack        = []
+    @method_locations    = {}
     @mass                = {}
     @parser              = RubyParser.new
     self.auto_shift_type = true
@@ -486,7 +488,7 @@ class Flog < SexpProcessor
   alias :process_lasgn :process_dasgn_curr
 
   def process_defn(exp)
-    in_method exp.shift do
+    in_method(exp.shift, exp.line) do
       analyze_list exp
     end
     s()
@@ -494,7 +496,7 @@ class Flog < SexpProcessor
 
   def process_defs(exp)
     process exp.shift
-    in_method exp.shift do
+    in_method(exp.shift, exp.line) do
       analyze_list exp
     end
     s()
@@ -529,8 +531,8 @@ class Flog < SexpProcessor
           [:lit, :str].include? recv.arglist[1][0]) then
         msg = recv[2]
         submsg = recv.arglist[1][1]
-        in_method submsg do
-          in_klass msg do
+        in_klass msg do
+          in_method(submsg, exp.line) do
             analyze_list exp
           end
         end
